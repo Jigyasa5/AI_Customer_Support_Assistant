@@ -1,21 +1,28 @@
-from transformers import pipeline
+import os
+from dotenv import load_dotenv
+from google import genai
 
+# Load Gemini Client
 
 def load_generator():
 
-    generator = pipeline(
+    load_dotenv()
 
-        "text-generation",
+    api_key = os.getenv("GEMINI_API_KEY")
 
-        model="gpt-oss-20b",
+    if not api_key:
+        raise ValueError(
+            "GEMINI_API_KEY not found in .env"
+        )
 
-        max_new_tokens=100,
-
-        do_sample=False
+    client = genai.Client(
+        api_key=api_key
     )
 
-    return generator
+    return client
 
+
+# Retrieve Context
 
 def retrieve_context(
     query,
@@ -24,23 +31,24 @@ def retrieve_context(
     top_k=3
 ):
 
+    query_embedding = (
+        embedding_model
+        .encode([query])
+        .tolist()
+    )
+
     results = collection.query(
-
-        query_embeddings=
-        embedding_model.encode(
-            [query]
-        ).tolist(),
-
+        query_embeddings=query_embedding,
         n_results=top_k
     )
 
     documents = results["documents"][0]
 
-    context = "\n\n".join(
-        documents
-    )
+    context = "\n\n".join(documents)
 
     return context
+
+   
 
 
 def create_prompt(
@@ -71,24 +79,20 @@ USER QUESTION:
 
 ANSWER:
 """
-
+# Generate Answer using Gemini
 
 def generate_answer(
     query,
     collection,
     embedding_model,
-    generator,
+    client,
     top_k=3
 ):
 
     context = retrieve_context(
-
         query,
-
         collection,
-
         embedding_model,
-
         top_k
     )
 
@@ -97,22 +101,12 @@ def generate_answer(
         context
     )
 
-    response = generator(
-        prompt
+     # Call Gemini API
+
+    response = client.models.generate_content(
+        model="gemini-3.6-flash",
+        contents=prompt
     )
 
-    generated_text = response[0][
-        "generated_text"
-    ]
-
-    if "ANSWER:" in generated_text:
-
-        answer = generated_text.split(
-            "ANSWER:"
-        )[-1].strip()
-
-    else:
-
-        answer = generated_text.strip()
-
-    return answer
+    return response.text.strip()
+    
